@@ -1,0 +1,671 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>App.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">inkball</a> &gt; <a href="index.source.html" class="el_package">inkball</a> &gt; <span class="el_source">App.java</span></div><h1>App.java</h1><pre class="source lang-java linenums">package inkball;
+
+import javafx.scene.input.MouseButton;
+import processing.core.PApplet;
+import processing.core.PImage;
+import processing.core.PVector;
+import processing.data.JSONArray;
+import processing.data.JSONObject;
+import processing.event.KeyEvent;
+import processing.event.MouseEvent;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+
+import java.io.*;
+import java.util.*;
+
+public class App extends PApplet {
+
+    public static final int CELLSIZE = 32; //8;
+    public static final int CELLHEIGHT = 32;
+
+    public static final int CELLAVG = 32;
+    public static final int TOPBAR = 64;
+<span class="fc" id="L26">    public static int WIDTH = 576; //CELLSIZE*BOARD_WIDTH;</span>
+<span class="fc" id="L27">    public static int HEIGHT = 640; //BOARD_HEIGHT*CELLSIZE+TOPBAR;</span>
+<span class="fc" id="L28">    public static final int BOARD_WIDTH = WIDTH/CELLSIZE;</span>
+    public static final int BOARD_HEIGHT = 20;
+
+    public static final int INITIAL_PARACHUTES = 1;
+
+    public static final int FPS = 30;
+
+    public String configPath;
+<span class="fc" id="L36">    public String[] layout = new String[3];</span>
+<span class="fc" id="L37">    public int[] timeArray = new int[3];</span>
+<span class="fc" id="L38">    public int[] spawn_interval = new int[3];</span>
+<span class="fc" id="L39">    public int[] score_increase_from_hole_capture_modifier = new int[3];</span>
+<span class="fc" id="L40">    public int[] score_decrease_from_wrong_hole_modifier = new int[3];</span>
+<span class="fc" id="L41">    public int[] score_increase_from_hole_capture = new int[5]; // The amount of units score is increased for each ball type when they successfully enter a hole</span>
+<span class="fc" id="L42">    public int[] score_decrease_from_wrong_hole = new int[5]; // The amount of units score is decreased for each ball type when they enter the wrong hole</span>
+
+<span class="fc" id="L44">    public boolean[] game_win = new boolean[3];</span>
+    public int level;
+<span class="fc" id="L46">    public String file_path = &quot;&quot;;</span>
+    public int time;
+    public int interval;
+    public int increase_modifier;
+    public int decrease_modifier;
+<span class="fc" id="L51">    private ArrayList&lt;ArrayList&lt;String&gt;&gt; allLevelBalls = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L52">    public ArrayList&lt;String&gt; levelBalls = new ArrayList&lt;&gt;();  // A list of balls that store in level i</span>
+<span class="fc" id="L53">    public ArrayList&lt;Integer&gt; levelBallsColour = new ArrayList&lt;&gt;(); // A list of balls that store colour in level i</span>
+<span class="fc" id="L54">    public char[][] char2DArray = new char[(HEIGHT - TOPBAR) / CELLSIZE][WIDTH / CELLSIZE];</span>
+
+    public  boolean game_start;
+    public boolean game_over;
+    public int start_time;
+    public int time_left;
+    public float time_previous;
+    public float time_current;
+    public float countdown;
+    public boolean time_over;
+    public int time_pause;
+    public boolean isPaused; // Time is paused or not
+    public int score;
+<span class="fc" id="L67">    public int lastBallSpawnTime = 0;  // Time when the last ball was spawned</span>
+<span class="fc" id="L68">    public int numberOfSpawnBall = 0;</span>
+
+
+    private Tile[][] board;
+    private Ball ball;
+    private Wall wall;
+    private Hole hole;
+    private Spawner spawner;
+<span class="fc" id="L76">    private final HashMap&lt;String,PImage&gt; sprites = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L77">    private ArrayList&lt;Line&gt; playerLines = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L78">    private ArrayList&lt;Ball&gt; balls = new ArrayList&lt;&gt;();  // Store balls that begin to spawn</span>
+<span class="fc" id="L79">    private ArrayList&lt;Ball&gt; alternativeBall = new ArrayList&lt;&gt;(); // Store balls that ready to spawn from spawner</span>
+<span class="fc" id="L80">    private ArrayList&lt;Ball&gt; displayBall = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L81">    private List&lt;Ball&gt; ballsToRemove = new ArrayList&lt;&gt;(); // Create a temporary list to store balls to be removed</span>
+<span class="fc" id="L82">    private ArrayList&lt;Spawner&gt; spawners = new ArrayList&lt;&gt;(); // Store all spawners</span>
+    private Line currentLine;  // The line being drawn
+<span class="fc" id="L84">    private boolean isDrawing = false;</span>
+
+
+    // Feel free to add any additional methods or attributes you want. Please put classes in different files.
+
+    public void gameStart() {
+
+<span class="fc" id="L91">        board = new Tile[(HEIGHT - TOPBAR) / CELLSIZE][WIDTH / CELLSIZE];</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        for (int i = 0; i &lt; board.length; i++) {</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">            for (int j = 0; j &lt; board[i].length; j++) {</span>
+<span class="fc" id="L94">                board[i][j] = new Tile(i, j);</span>
+            }
+        }
+
+<span class="fc" id="L98">        playerLines = new ArrayList&lt;&gt;();</span>
+//        ballVel = new PVector(randomVelocity(), randomVelocity());
+
+        //default level is level1, if we win level1, enter level2 and so on until we win all levels.
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">        if (game_win[0] == false) {</span>
+<span class="fc" id="L103">            level = 0;</span>
+<span class="nc bnc" id="L104" title="All 4 branches missed.">        } else if (game_win[0] == true &amp;&amp; game_win[1] == false) {</span>
+<span class="nc" id="L105">            level = 1;</span>
+<span class="nc bnc" id="L106" title="All 6 branches missed.">        } else if (game_win[0] == true &amp;&amp; game_win[1] == true &amp;&amp; game_win[2] == false) {</span>
+<span class="nc" id="L107">            level = 2;</span>
+        }
+
+<span class="fc" id="L110">        file_path = layout[level];</span>
+<span class="fc" id="L111">        time = timeArray[level];</span>
+<span class="fc" id="L112">        interval = spawn_interval[level];</span>
+<span class="fc" id="L113">        levelBalls = allLevelBalls.get(level);</span>
+<span class="fc" id="L114">        increase_modifier = score_increase_from_hole_capture_modifier[level];</span>
+<span class="fc" id="L115">        decrease_modifier = score_decrease_from_wrong_hole_modifier[level];</span>
+
+<span class="fc" id="L117">        game_over = false;</span>
+<span class="fc" id="L118">        score = 0;</span>
+
+        // Initialize the start time
+<span class="fc" id="L121">        start_time = millis(); // The start time in milliseconds</span>
+<span class="fc" id="L122">        time_over = false;</span>
+<span class="fc" id="L123">        countdown = (float) interval;</span>
+<span class="fc" id="L124">        time_previous = millis();</span>
+
+        // Initialize the isPaused
+<span class="fc" id="L127">        isPaused = false;</span>
+
+        //read file based on &quot;config.jason&quot; in order to layout.
+<span class="fc" id="L130">        read_filepath();</span>
+
+<span class="fc bfc" id="L132" title="All 2 branches covered.">        for (int i = 0; i &lt; char2DArray.length; i++) {</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">            for (int j = 0 ; j &lt; char2DArray[i].length; j++) {</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">                if (char2DArray[i][j] == 'B') {</span>
+//                    Ball ball = createBall(j * CELLSIZE , i * CELLSIZE + TOPBAR, char2DArray[i][j+1]);
+//                    balls.add(ball);
+//                    ball = new Ball(j * CELLSIZE - Ball.radius, i * CELLSIZE + TOPBAR - Ball.radius);
+<span class="fc" id="L138">                    ball = createBall(j * CELLSIZE + Ball.radius, i * CELLSIZE + TOPBAR + Ball.radius, Integer.parseInt(String.valueOf(char2DArray[i][j+1])));</span>
+<span class="fc" id="L139">                    ball.setVelocity(randomVelocity(), randomVelocity());</span>
+<span class="fc" id="L140">                    balls.add(ball);</span>
+                }
+<span class="fc bfc" id="L142" title="All 2 branches covered.">                else if (char2DArray[i][j] == 'S') {</span>
+<span class="fc" id="L143">                    spawner = new Spawner(j, i);</span>
+<span class="fc" id="L144">                    spawners.add(spawner);// Add spawner to the list</span>
+                }
+            }
+        }
+
+<span class="fc bfc" id="L149" title="All 2 branches covered.">        for (String ball : levelBalls) {</span>
+<span class="fc" id="L150">            convertColour(ball);</span>
+<span class="fc" id="L151">        }</span>
+//        System.out.println(&quot;levelBalls = &quot; + levelBalls);
+//        System.out.println(&quot;levelBallsColour = &quot; + levelBallsColour);
+
+        // Create all the alternative balls in config file and ready to spawn
+<span class="fc bfc" id="L156" title="All 2 branches covered.">        for (int colour : levelBallsColour) {</span>
+<span class="fc" id="L157">            spawnBallAtRandomSpawner(colour);</span>
+<span class="fc" id="L158">        }</span>
+<span class="fc" id="L159">    }</span>
+
+    public PImage getSprite(String s){
+<span class="fc" id="L162">        PImage result = sprites.get(s);</span>
+<span class="fc bfc" id="L163" title="All 2 branches covered.">        if(result == null) {</span>
+            try {
+<span class="fc" id="L165">                result = loadImage(URLDecoder.decode(this.getClass().getResource(s + &quot;.png&quot;).getPath(), StandardCharsets.UTF_8.name()));</span>
+<span class="nc" id="L166">            } catch (UnsupportedEncodingException e) {</span>
+<span class="nc" id="L167">                throw new RuntimeException(e);</span>
+<span class="fc" id="L168">            }</span>
+<span class="fc" id="L169">            sprites.put(s, result);</span>
+        }
+<span class="fc" id="L171">        return result;</span>
+    }
+
+    public void read_filepath() {
+        try {
+<span class="fc" id="L176">            File file = new File(file_path);</span>
+<span class="fc" id="L177">            Scanner scanner = new Scanner(file);</span>
+<span class="fc" id="L178">            StringBuilder file_contend = new StringBuilder();</span>
+
+<span class="fc bfc" id="L180" title="All 2 branches covered.">            while(scanner.hasNextLine()) {</span>
+<span class="fc" id="L181">                file_contend.append(scanner.nextLine()).append(&quot;\n&quot;);</span>
+            }
+<span class="fc" id="L183">            scanner.close();</span>
+<span class="fc" id="L184">            String content = file_contend.toString();</span>
+<span class="fc" id="L185">            String[] lines = content.trim().split(&quot;\n&quot;);</span>
+<span class="fc bfc" id="L186" title="All 2 branches covered.">            for (int i = 0; i &lt; lines.length; i++) {</span>
+<span class="fc" id="L187">                char2DArray[i] = lines[i].toCharArray();</span>
+            }
+//            for (char[] row : char2DArray) {
+//                for (char c : row) {
+//                    System.out.print(c);
+//                }
+//                System.out.println();
+//            }
+<span class="nc" id="L195">        } catch (FileNotFoundException e) {</span>
+<span class="nc" id="L196">            throw new RuntimeException(e);</span>
+<span class="fc" id="L197">        }</span>
+<span class="fc" id="L198">    }</span>
+
+    public boolean isWin(boolean[] game_win) {
+<span class="fc bfc" id="L201" title="All 2 branches covered.">        for (int i = 0; i &lt; game_win.length; i++) {</span>
+<span class="pc bpc" id="L202" title="1 of 2 branches missed.">            if (game_win[i] == false) return false;</span>
+        }
+<span class="fc" id="L204">        return true;</span>
+    }
+
+    // Generates a random velocity of either -2 or 2
+    private int randomVelocity() {
+<span class="fc bfc" id="L209" title="All 2 branches covered.">        return random(1) &gt; 0.5 ? 2 : -2;</span>
+    }
+
+
+    public Ball createBall (int x, int y, int colour) {
+<span class="fc" id="L214">        Ball ball = new Ball(x, y);</span>
+<span class="fc" id="L215">        ball.setColour(colour);</span>
+<span class="fc" id="L216">        return ball;</span>
+    }
+
+    // Convert colour that store in levelBalls to integer
+    public void convertColour(String colour) {
+<span class="pc bpc" id="L221" title="1 of 6 branches missed.">        switch (colour) {</span>
+            case &quot;grey&quot;:
+<span class="fc" id="L223">                levelBallsColour.add(0);</span>
+<span class="fc" id="L224">                break;</span>
+            case &quot;orange&quot;:
+<span class="fc" id="L226">                levelBallsColour.add(1);</span>
+<span class="fc" id="L227">                break;</span>
+            case &quot;blue&quot;:
+<span class="fc" id="L229">                levelBallsColour.add(2);</span>
+<span class="fc" id="L230">                break;</span>
+            case &quot;green&quot;:
+<span class="fc" id="L232">                levelBallsColour.add(3);</span>
+<span class="fc" id="L233">                break;</span>
+            case &quot;yellow&quot;:
+<span class="fc" id="L235">                levelBallsColour.add(4);</span>
+<span class="fc" id="L236">                break;</span>
+            default:
+<span class="nc" id="L238">                throw new IllegalArgumentException(&quot;Unknown color: &quot; + colour);</span>
+        }
+<span class="fc" id="L240">    }</span>
+
+
+    // Method to spawn a ball at a random spawner
+    public void spawnBallAtRandomSpawner(int colour) {
+        // Pick a random spawner from the list
+<span class="fc" id="L246">        Spawner randomSpawner = spawners.get((int) this.random(spawners.size()));</span>
+        // Spawn a ball using the randomly selected spawner
+<span class="fc" id="L248">        ball = createBall(randomSpawner.getX() * CELLSIZE + Ball.radius, randomSpawner.getY() * CELLSIZE + TOPBAR + Ball.radius, colour);</span>
+//        ball = createBall(j * CELLSIZE + Ball.radius, i * CELLSIZE + TOPBAR + Ball.radius, Integer.parseInt(String.valueOf(char2DArray[i][j+1])));
+<span class="fc" id="L250">        ball.setVelocity(randomVelocity(), randomVelocity());</span>
+//        balls.add(ball);
+<span class="fc" id="L252">        alternativeBall.add(ball);</span>
+<span class="fc" id="L253">    }</span>
+
+    // Method to remove a line at the mouse's current position
+    public void removeLineAtMousePosition(float mouseX, float mouseY) {
+<span class="nc bnc" id="L257" title="All 2 branches missed.">        for (int i  = playerLines.size() - 1; i &gt;= 0; i++) {</span>
+<span class="nc" id="L258">            Line line = playerLines.get(i);</span>
+<span class="nc bnc" id="L259" title="All 2 branches missed.">            if (line.isPointOnLine(mouseX, mouseY)) {</span>
+<span class="nc" id="L260">                playerLines.remove(i);  // Remove the line if the mouse is hovering over it</span>
+<span class="nc" id="L261">                break;  // Exit after removing one line</span>
+            }
+        }
+<span class="nc" id="L264">    }</span>
+
+    public int getDisplayBallColour(int index) {
+<span class="fc" id="L267">        return levelBallsColour.get(index);</span>
+    }
+
+    public void computeScore(Ball ball, Hole hole) {
+<span class="pc bpc" id="L271" title="2 of 4 branches missed.">        if (ball.getColour() == hole.getCoclour() || hole.getCoclour() == 0) {</span>
+            //
+<span class="nc" id="L273">            score += score_increase_from_hole_capture[ball.getColour()] * increase_modifier;</span>
+        }else {
+<span class="fc" id="L275">            score -= score_decrease_from_wrong_hole[ball.getColour()] * decrease_modifier;</span>
+        }
+<span class="fc" id="L277">    }</span>
+
+    public boolean isPass() {
+<span class="nc bnc" id="L280" title="All 2 branches missed.">        if (balls.isEmpty()) return true;</span>
+<span class="nc" id="L281">        else return false;</span>
+    }
+
+<span class="fc" id="L284">    public App() {</span>
+<span class="fc" id="L285">        this.configPath = &quot;config.json&quot;;</span>
+<span class="fc" id="L286">    }</span>
+
+    /**
+     * Initialise the setting of the window size.
+     */
+    @Override
+    public void settings() {
+<span class="fc" id="L293">        size(WIDTH, HEIGHT);</span>
+<span class="fc" id="L294">    }</span>
+
+    /**
+     * Load all resources such as images. Initialise the elements such as the player and map elements.
+     */
+    @Override
+    public void setup() {
+<span class="fc" id="L301">        frameRate(FPS);</span>
+
+        //See PApplet javadoc:
+        //loadJSONObject(configPath)
+        // the image is loaded from relative path: &quot;src/main/resources/inkball/...&quot;
+		/*try {
+            result = loadImage(URLDecoder.decode(this.getClass().getResource(filename+&quot;.png&quot;).getPath(), StandardCharsets.UTF_8.name()));
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }*/
+<span class="fc" id="L311">        JSONObject config = loadJSONObject(configPath);</span>
+<span class="fc" id="L312">        JSONArray levels = config.getJSONArray(&quot;levels&quot;);</span>
+<span class="fc" id="L313">        JSONObject scoreIncrease = config.getJSONObject(&quot;score_increase_from_hole_capture&quot;);</span>
+<span class="fc" id="L314">        JSONObject scoreDecrease = config.getJSONObject(&quot;score_decrease_from_wrong_hole&quot;);</span>
+        //Then we begin to read the txt file and layout it based on txt.
+
+<span class="fc" id="L317">        score_increase_from_hole_capture[0] = scoreIncrease.getInt(&quot;grey&quot;);</span>
+<span class="fc" id="L318">        score_increase_from_hole_capture[1] = scoreIncrease.getInt(&quot;orange&quot;);</span>
+<span class="fc" id="L319">        score_increase_from_hole_capture[2] = scoreIncrease.getInt(&quot;blue&quot;);</span>
+<span class="fc" id="L320">        score_increase_from_hole_capture[3] = scoreIncrease.getInt(&quot;green&quot;);</span>
+<span class="fc" id="L321">        score_increase_from_hole_capture[4] = scoreIncrease.getInt(&quot;yellow&quot;);</span>
+
+<span class="fc" id="L323">        score_decrease_from_wrong_hole[0] = scoreDecrease.getInt(&quot;grey&quot;);</span>
+<span class="fc" id="L324">        score_decrease_from_wrong_hole[1] = scoreDecrease.getInt(&quot;orange&quot;);</span>
+<span class="fc" id="L325">        score_decrease_from_wrong_hole[2] = scoreDecrease.getInt(&quot;blue&quot;);</span>
+<span class="fc" id="L326">        score_decrease_from_wrong_hole[3] = scoreDecrease.getInt(&quot;green&quot;);</span>
+<span class="fc" id="L327">        score_decrease_from_wrong_hole[4] = scoreDecrease.getInt(&quot;yellow&quot;);</span>
+
+<span class="fc bfc" id="L329" title="All 2 branches covered.">        for (int i = 0; i &lt; levels.size(); i++) {</span>
+<span class="fc" id="L330">            JSONObject level = levels.getJSONObject(i);</span>
+<span class="fc" id="L331">            JSONArray ballsArray = level.getJSONArray(&quot;balls&quot;);  // Get the &quot;balls&quot; array for the level</span>
+<span class="fc" id="L332">            layout[i] = level.getString(&quot;layout&quot;);</span>
+<span class="fc" id="L333">            timeArray[i] = level.getInt(&quot;time&quot;);</span>
+<span class="fc" id="L334">            spawn_interval[i] = level.getInt(&quot;spawn_interval&quot;);</span>
+<span class="fc" id="L335">            score_increase_from_hole_capture_modifier[i] = level.getInt(&quot;score_increase_from_hole_capture_modifier&quot;);</span>
+<span class="fc" id="L336">            score_decrease_from_wrong_hole_modifier[i] = level.getInt(&quot;score_decrease_from_wrong_hole_modifier&quot;);</span>
+
+            // Create a new list for the current level's balls
+<span class="fc" id="L339">            ArrayList&lt;String&gt; levelBalls = new ArrayList&lt;&gt;();</span>
+
+            // Add each ball from the ballsArray to the levelBalls list
+<span class="fc bfc" id="L342" title="All 2 branches covered.">            for (int j = 0; j &lt; ballsArray.size(); j++) {</span>
+<span class="fc" id="L343">                levelBalls.add(ballsArray.getString(j));</span>
+            }
+
+            // Add the current level's ball list to the master list
+<span class="fc" id="L347">            allLevelBalls.add(levelBalls);</span>
+
+//            println(&quot;Level &quot; + (i + 1) + &quot;:&quot;);
+//            println(&quot;Layout: &quot; + layout);
+//            println(&quot;Time: &quot; + time);
+//            println(&quot;Spawn Interval: &quot; + spawnInterval);
+//            println(&quot;allLevelBalls = &quot; + allLevelBalls);
+//            println(&quot;levelBalls = &quot; + levelBalls);
+
+        }
+
+        //initialize game_start
+<span class="fc" id="L359">        game_start = true;</span>
+<span class="pc bpc" id="L360" title="1 of 2 branches missed.">        if (game_start) {</span>
+<span class="fc bfc" id="L361" title="All 2 branches covered.">            for (int i = 0; i &lt; game_win.length; i++) {</span>
+<span class="fc" id="L362">                game_win[i] = false;</span>
+            }
+        }
+
+//        game_win[0] = true;
+//        game_win[1] = true;
+
+<span class="fc" id="L369">        gameStart();</span>
+
+<span class="fc" id="L371">    }</span>
+
+    /**
+     * Receive key pressed signal from the keyboard.
+     */
+    @Override
+    public void keyPressed(KeyEvent event){
+
+<span class="nc bnc" id="L379" title="All 2 branches missed.">        if (event.getKey() == 'r') {</span>
+<span class="nc bnc" id="L380" title="All 2 branches missed.">            if (isPass()) {</span>
+                // Pass the level
+<span class="nc" id="L382">                game_win[level] = true;</span>
+            } else {
+<span class="nc" id="L384">                time_over = false;</span>
+<span class="nc" id="L385">                playerLines.clear();// Remove lines</span>
+<span class="nc" id="L386">                balls.clear();</span>
+<span class="nc" id="L387">                gameStart();</span>
+            }
+        }
+<span class="nc bnc" id="L390" title="All 2 branches missed.">        else if (event.getKey() == ' ') {</span>
+<span class="nc bnc" id="L391" title="All 2 branches missed.">            for (Ball ball : balls) {</span>
+<span class="nc" id="L392">                ball.changePause();</span>
+<span class="nc" id="L393">            }</span>
+<span class="nc bnc" id="L394" title="All 2 branches missed.">            isPaused = !isPaused;</span>
+<span class="nc bnc" id="L395" title="All 2 branches missed.">            if (isPaused) {</span>
+<span class="nc" id="L396">                time_pause = millis() - start_time;</span>
+            }
+        }
+<span class="nc" id="L399">    }</span>
+
+    /**
+     * Receive key released signal from the keyboard.
+     */
+    @Override
+    public void keyReleased(){
+
+<span class="nc" id="L407">    }</span>
+
+    @Override
+    public void mousePressed(MouseEvent e) {
+        // Start drawing a new line on left mouse press
+<span class="nc bnc" id="L412" title="All 4 branches missed.">        if (e.getButton() == LEFT &amp;&amp; !e.isControlDown()) {</span>
+<span class="nc" id="L413">            isDrawing = true;</span>
+<span class="nc" id="L414">            currentLine = new Line();  // Create a new Line object</span>
+<span class="nc" id="L415">            currentLine.addPoint(mouseX, mouseY);  // Add the starting point</span>
+        }
+        // Handle right-click or Ctrl + Left Click for removing lines
+<span class="nc bnc" id="L418" title="All 6 branches missed.">        if (e.getButton() == RIGHT || (e.getButton() == LEFT &amp;&amp; e.isControlDown())) {</span>
+<span class="nc" id="L419">            removeLineAtMousePosition(mouseX, mouseY);</span>
+        }
+<span class="nc" id="L421">    }</span>
+
+    @Override
+    public void mouseDragged(MouseEvent e) {
+        // Continue adding points to the line as the mouse is dragged
+<span class="nc bnc" id="L426" title="All 2 branches missed.">        if (isDrawing) {</span>
+<span class="nc" id="L427">            currentLine.addPoint(mouseX, mouseY);</span>
+        }
+<span class="nc" id="L429">    }</span>
+
+    @Override
+    public void mouseReleased(MouseEvent e) {
+        // Stop drawing when the mouse is released
+<span class="nc bnc" id="L434" title="All 4 branches missed.">        if (isDrawing &amp;&amp; e.getButton() == LEFT) {</span>
+<span class="nc" id="L435">            playerLines.add(currentLine);  // Add the finished line to the list</span>
+<span class="nc" id="L436">            isDrawing = false;  // Stop the drawing</span>
+        }
+<span class="nc" id="L438">    }</span>
+
+    /**
+     * Draw all elements in the game by current frame.
+     */
+    @Override
+    public void draw() {
+
+        //----------------------------------
+        //display Board for current level:
+        //----------------------------------
+        //TODO
+<span class="fc" id="L450">        background(200, 200, 200);</span>
+
+        // Draw the rectangle (storage area) at the top-left
+<span class="fc" id="L453">        fill(0);</span>
+<span class="fc" id="L454">        stroke(200);</span>
+<span class="fc" id="L455">        rect(10, 10, 170, 50);  // Example position and size</span>
+
+        // Position of five balls
+//        for (int i = 0; i &lt; 5; i++) {
+//            fill(255);
+//            ellipse(30 + i * 30, 30, 12, 12);
+//        }
+
+<span class="fc bfc" id="L463" title="All 2 branches covered.">        for (int i = 0; i &lt; 5; i++) {</span>
+<span class="pc bpc" id="L464" title="1 of 2 branches missed.">            if (i + numberOfSpawnBall &lt; levelBallsColour.size()) {</span>
+<span class="fc" id="L465">                displayBall.add(createBall(30 + i * 30, 30, getDisplayBallColour(i + numberOfSpawnBall)));</span>
+            }
+<span class="nc bnc" id="L467" title="All 2 branches missed.">            else if (i &gt;= displayBall.size()) {</span>
+<span class="nc" id="L468">                break;</span>
+            }
+            // Remove balls
+<span class="nc bnc" id="L471" title="All 2 branches missed.">            else if (i + numberOfSpawnBall &gt; levelBallsColour.size()) {</span>
+//                System.out.println(&quot;i = &quot; + i);
+<span class="nc" id="L473">                displayBall.remove(i);</span>
+            }
+        }
+
+<span class="pc bpc" id="L477" title="1 of 2 branches missed.">        if (!displayBall.isEmpty()) {</span>
+<span class="fc bfc" id="L478" title="All 2 branches covered.">            for (Ball ball : displayBall) {</span>
+<span class="fc" id="L479">                ball.draw(this);</span>
+<span class="fc" id="L480">            }</span>
+        }
+
+<span class="fc" id="L483">        time_current = millis();</span>
+
+<span class="pc bpc" id="L485" title="2 of 4 branches missed.">        if (!time_over &amp;&amp; !isPaused) {</span>
+            // Calculate the elapsed time and update time_left
+<span class="fc" id="L487">            int elapsedTime = (millis() - start_time) / 1000;</span>
+<span class="fc" id="L488">            time_left = time - elapsedTime;</span>
+
+<span class="pc bpc" id="L490" title="1 of 2 branches missed.">            if (countdown &gt; 0) {</span>
+<span class="fc" id="L491">                countdown -= (float) ((time_current - time_previous) / 1000.0);</span>
+            }
+
+<span class="pc bpc" id="L494" title="3 of 4 branches missed.">            if (millis() - lastBallSpawnTime &gt;= interval * 1000 &amp;&amp; !alternativeBall.isEmpty()) {</span>
+//                System.out.println(count + &quot;th call&quot;);
+//                System.out.println(&quot;alternativeBall size = &quot; + alternativeBall.size());
+<span class="nc" id="L497">                ball = alternativeBall.get(0);  // Get the next ball</span>
+<span class="nc" id="L498">                balls.add(ball);  // Add it to the active ball list</span>
+<span class="nc" id="L499">                alternativeBall.remove(0);  // Remove it from the ready-to-spawn list</span>
+<span class="nc" id="L500">                lastBallSpawnTime = millis();  // Update the last spawn time</span>
+<span class="nc" id="L501">                numberOfSpawnBall++;</span>
+
+            }
+
+<span class="pc bpc" id="L505" title="1 of 2 branches missed.">            if (time_left &lt;= 0) {</span>
+<span class="nc" id="L506">                time_over = true;</span>
+<span class="nc" id="L507">                time_left = 0;</span>
+            }
+<span class="fc" id="L509">        }</span>
+<span class="nc bnc" id="L510" title="All 4 branches missed.">        else if (!time_over &amp;&amp; isPaused) {</span>
+<span class="nc" id="L511">            start_time = millis() - time_pause;</span>
+        }
+
+        // Display the remaining time in the top-right corner
+<span class="fc" id="L515">        fill(0);</span>
+<span class="nc" id="L516">        textSize(20);</span>
+<span class="nc" id="L517">        textAlign(RIGHT, TOP);</span>
+<span class="nc" id="L518">        text(&quot;Time:&quot; + time_left, WIDTH-10, 40);</span>
+
+<span class="nc" id="L520">        textAlign(CENTER, TOP);</span>
+<span class="nc" id="L521">        text(nf(countdown, 1, 1), WIDTH/2, 35);</span>
+
+<span class="nc bnc" id="L523" title="All 2 branches missed.">        if (countdown &lt;= 0) {</span>
+<span class="nc" id="L524">            countdown = (float) interval;</span>
+        }
+<span class="nc" id="L526">        time_previous = time_current;</span>
+
+        // Display &quot;TIME'S UP&quot; message when the time is over
+<span class="nc bnc" id="L529" title="All 2 branches missed.">        if (time_over) {</span>
+<span class="nc" id="L530">            fill(255, 0, 0);  // Red color for the message</span>
+<span class="nc" id="L531">            textSize(30);</span>
+<span class="nc" id="L532">            textAlign(CENTER, TOP);</span>
+<span class="nc" id="L533">            text(&quot;=== TIME'S UP ===&quot;, WIDTH / 2, 10);</span>
+        }
+
+<span class="nc bnc" id="L536" title="All 2 branches missed.">        if (isPaused) {</span>
+<span class="nc" id="L537">            fill(255, 0, 0);</span>
+<span class="nc" id="L538">            textSize(30);</span>
+<span class="nc" id="L539">            textAlign(CENTER, TOP);</span>
+<span class="nc" id="L540">            text(&quot;*** PAUSED ***&quot;, WIDTH / 2 + 30, 10);</span>
+        }
+
+
+<span class="nc bnc" id="L544" title="All 2 branches missed.">        for (int i = 0; i &lt; this.board.length; i++) {</span>
+<span class="nc bnc" id="L545" title="All 2 branches missed.">            for (int j = 0; j &lt; this.board.length; j++) {</span>
+<span class="nc" id="L546">                image(getSprite(&quot;tile&quot;), j * CELLSIZE, i * CELLSIZE + TOPBAR</span>
+                        , CELLSIZE, CELLSIZE);
+            }
+        }
+
+<span class="nc bnc" id="L551" title="All 2 branches missed.">        for (int i = 0; i &lt; this.board.length; i++) {</span>
+<span class="nc bnc" id="L552" title="All 2 branches missed.">            for (int j = 0; j &lt; this.board.length; j++) {</span>
+<span class="nc bnc" id="L553" title="All 2 branches missed.">                if (!Character.isDigit(char2DArray[i][j])) {</span>
+<span class="nc bnc" id="L554" title="All 2 branches missed.">                    if (char2DArray[i][j] == 'X') {</span>
+<span class="nc" id="L555">                        wall = new Wall(j,i);</span>
+//                        image(getSprite(&quot;wall0&quot;), j * CELLSIZE, i * CELLSIZE + TOPBAR
+//                                , CELLSIZE, CELLSIZE);
+<span class="nc" id="L558">                        int colour = 0;</span>
+<span class="nc" id="L559">                        wall.setColour(colour);</span>
+<span class="nc" id="L560">                        wall.draw(this);</span>
+<span class="nc bnc" id="L561" title="All 2 branches missed.">                        for (Ball ball : balls) {</span>
+<span class="nc" id="L562">                            wall.checkCollision(ball);</span>
+<span class="nc" id="L563">                        }</span>
+<span class="nc bnc" id="L564" title="All 2 branches missed.">                    } else if (char2DArray[i][j] == 'S') {</span>
+<span class="nc" id="L565">                        spawner = new Spawner(j,i);</span>
+<span class="nc" id="L566">                        spawner.draw(this);</span>
+<span class="nc bnc" id="L567" title="All 2 branches missed.">                    } else if (char2DArray[i][j] == 'B') {</span>
+//                        int colour = Character.getNumericValue(char2DArray[i][j+1]);
+//                        ball = new Ball(j * CELLSIZE , i * CELLSIZE + TOPBAR);
+//                        ball.setColour(colour);
+<span class="nc" id="L571">                        continue;</span>
+<span class="nc bnc" id="L572" title="All 2 branches missed.">                    } else if (char2DArray[i][j] == 'H') {</span>
+<span class="nc" id="L573">                        int colour = Character.getNumericValue(char2DArray[i][j+1]);</span>
+<span class="nc" id="L574">                        hole = new Hole(j,i);</span>
+<span class="nc" id="L575">                        hole.setCoclour(colour);</span>
+<span class="nc" id="L576">                        hole.draw(this);</span>
+//                        PVector holeCenter = hole.getCenter();
+//                        ball.applyAttraction(holeCenter);
+<span class="nc bnc" id="L579" title="All 2 branches missed.">                        for (Ball ball : balls) {</span>
+//                            ball.applyAttraction(holeCenter);
+<span class="nc" id="L581">                            ball.isBallOverHole(hole.getX() * CELLSIZE + CELLSIZE, hole.getY() * CELLSIZE + CELLSIZE + CELLSIZE / 2 + TOPBAR);</span>
+//                            ball.isBallOverHole(hole.getX() * App.CELLSIZE + App.CELLSIZE / 2, hole.getY() * App.CELLSIZE + App.CELLSIZE / 2 + App.TOPBAR);
+<span class="nc bnc" id="L583" title="All 2 branches missed.">                            if (ball.isCaptured()) { // A ball fell in the hole</span>
+                                // Calculate score
+<span class="nc" id="L585">                                computeScore(ball, hole);</span>
+<span class="nc" id="L586">                                ballsToRemove.add(ball);</span>
+                            }
+<span class="nc" id="L588">                        }</span>
+<span class="nc" id="L589">                    }</span>
+                }
+                else {
+<span class="nc bnc" id="L592" title="All 4 branches missed.">                    if (j != 0 &amp;&amp; char2DArray[i][j-1] == 'B') continue;</span>
+<span class="nc bnc" id="L593" title="All 4 branches missed.">                    else if (j != 0 &amp;&amp; char2DArray[i][j-1] == 'H') continue;</span>
+                    else {
+<span class="nc" id="L595">                        int colour = Character.getNumericValue(char2DArray[i][j]);</span>
+<span class="nc" id="L596">                        wall = new Wall(j,i);</span>
+<span class="nc" id="L597">                        wall.setColour(colour);</span>
+<span class="nc" id="L598">                        wall.draw(this);</span>
+<span class="nc bnc" id="L599" title="All 2 branches missed.">                        for (Ball ball : balls) {</span>
+<span class="nc" id="L600">                            wall.checkCollision(ball);</span>
+<span class="nc" id="L601">                        }</span>
+                    }
+                }
+            }
+        }
+
+
+
+<span class="nc bnc" id="L609" title="All 4 branches missed.">        if (!isWin(game_win) &amp;&amp; !time_over) {</span>
+
+<span class="nc bnc" id="L611" title="All 2 branches missed.">            for (Ball ball : balls) {</span>
+<span class="nc bnc" id="L612" title="All 2 branches missed.">                if (ball.isCaptured()) continue;</span>
+<span class="nc" id="L613">                ball.draw(this);</span>
+<span class="nc" id="L614">                ball.updatePosition();</span>
+<span class="nc" id="L615">            }</span>
+
+<span class="nc" id="L617">            balls.removeAll(ballsToRemove);</span>
+
+            // Draw all player-drawn lines
+<span class="nc bnc" id="L620" title="All 2 branches missed.">            for (int i = playerLines.size() - 1; i &gt;= 0; i--) {</span>
+<span class="nc" id="L621">                Line line = playerLines.get(i);</span>
+<span class="nc" id="L622">                line.draw(this);  // Draw the line</span>
+
+<span class="nc bnc" id="L624" title="All 2 branches missed.">                for (Ball ball : balls) {</span>
+                    // Check if the ball collides with the line
+<span class="nc bnc" id="L626" title="All 2 branches missed.">                    if (line.ballHitsLine(ball)) {</span>
+<span class="nc" id="L627">                        ball.xVelocity *= -1;</span>
+<span class="nc" id="L628">                        ball.yVelocity *= -1;</span>
+<span class="nc" id="L629">                        playerLines.remove(i);  // Remove the line after collision</span>
+                    }
+<span class="nc" id="L631">                }</span>
+            }
+
+        }
+
+//        System.out.println(&quot;balls size = &quot; + balls.size());
+
+        //----------------------------------
+        //display score
+        //----------------------------------
+        //TODO
+
+<span class="nc" id="L643">        fill(0);</span>
+<span class="nc" id="L644">        textSize(20);</span>
+<span class="nc" id="L645">        textAlign(RIGHT, TOP);</span>
+<span class="nc" id="L646">        text(&quot;Score:&quot; + score, WIDTH-10, 20);</span>
+
+
+        //----------------------------------
+        //----------------------------------
+        //display game end message
+
+<span class="nc bnc" id="L653" title="All 2 branches missed.">        if (level == 3) {</span>
+            // Win the game
+<span class="nc" id="L655">            game_over = true;</span>
+<span class="nc" id="L656">            fill(255, 0, 0);</span>
+<span class="nc" id="L657">            textSize(30);</span>
+<span class="nc" id="L658">            textAlign(CENTER, TOP);</span>
+<span class="nc" id="L659">            text(&quot;*** GAME WIN ***&quot;, WIDTH / 2 + 30, 10);</span>
+        }
+
+
+<span class="nc" id="L663">    }</span>
+
+
+    public static void main(String[] args) {
+<span class="nc" id="L667">        PApplet.main(&quot;inkball.App&quot;);</span>
+<span class="nc" id="L668">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.9.202303310957</span></div></body></html>
